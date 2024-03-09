@@ -10,10 +10,10 @@ client = UMFutures(key = api, secret=secret)
 # 0.012 means +1.2%, 0.009 is -0.9%
 tp = 0.012
 sl = 0.009
-volume = 100 # 5usdt
+volume = 50 # volume for one order (if its 10 and leverage is 10, then you put 1 usdt to one position)
 leverage = 10
 type = 'ISOLATED'  # type is 'ISOLATED' or 'CROSS'
-qty = 100  # Amount of concurrent opened positions
+qty = 30  # Amount of concurrent opened positions
 
 # getting your futures balance in USDT
 def get_balance_usdt():
@@ -249,86 +249,13 @@ def ema200_50(symbol):
         return 'none'
 
 
-
-
-def bollinger_bands_signal(symbol):
-    kl = klines(symbol)  # klines 함수는 이미 구현
-    # 볼린저 밴드 계산
-    high_band = ta.volatility.bollinger_hband(kl['Close'])
-    low_band = ta.volatility.bollinger_lband(kl['Close'])
-
-    # 가격이 상단 밴드를 넘어섰는지 확인
-    if kl['Close'].iloc[-1] > high_band.iloc[-1]:
-        return 'down'  # 매도 신호
-    # 가격이 하단 밴드 아래로 떨어졌는지 확인
-    elif kl['Close'].iloc[-1] < low_band.iloc[-1]:
-        return 'up'  # 매수 신호
-    else:
-        return 'none'  # 아무 신호 없음
-
-# ----------------------------------------------
-# 기존 함수들은 생략하고, 통합 신호 결정 및 실행 로직에 초점을 맞춥니다.
-
-def integrate_signals_and_execute(symbol):
-    # 가정된 백테스팅 결과에 기반한 전략별 가중치
-    weights = {
-        'rsi_signal': 0.305,
-        'bollinger_bands_signal': 0.333,
-        'macd_ema': 0.461,
-        'ema200_50': 0.450,
-        'str_signal': 0.333
-
-
-
-        # signal = str_signal(elem)
-        # signal = rsi_signal(elem)
-        # signal1 = bollinger_bands_signal(elem)
-
-    }
-
-    # 전략별 신호 생성
-    signals = {
-        'rsi_signal': rsi_signal(symbol),
-        'bollinger_bands_signal': bollinger_bands_signal(symbol),
-        'macd_ema': macd_ema(symbol),
-        'ema200_50': ema200_50(symbol),
-        'str_signal': str_signal(symbol)
-    }
-
-    # 신호에 가중치 적용하여 종합 신호 계산
-    weighted_signals = sum(
-        weights[strategy] * (1 if signals[strategy] == 'up' else -1 if signals[strategy] == 'down' else 0)
-        for strategy in signals)
-    print(symbol," : ",weighted_signals)
-
-    # 현재 개설된 포지션 확인
-    current_pos = get_pos()
-    is_symbol_open = symbol in current_pos
-
-    # 종합 신호에 따라 매매 결정
-    if weighted_signals >= 0.5 and not is_symbol_open:
-        print(f"Opening LONG position for {symbol}")
-        return 'up'
-    elif weighted_signals <= -0.5 and not is_symbol_open:
-        print(f"Opening SHORT position for {symbol}")
-        return 'down'
-    elif is_symbol_open:
-        print(f"{symbol} position is already open, checking for close conditions...")
-        return 'none'
-        # 여기에 포지션 청산 조건 검사 로직 추가 (예: 반대 방향 신호 발생 시 청산)
-        # 이 부분은 실제 전략과 위험 관리 정책에 따라 달라질 수 있습니다.
-
-
-
-
-#-----------------------------------------------
 orders = 0
 symbol = ''
 # getting all symbols from Binace Futures list:
 symbols = get_tickers_usdt()
 
 while True:
-
+    # we need to get balance to check if the connection is good, or you have all the needed permissions
     balance = get_balance_usdt()
     sleep(1)
     if balance == None:
@@ -351,12 +278,14 @@ while True:
             for elem in symbols:
                 # Strategies (you can make your own with the TA library):
 
-                sleep(0.3)
-                temp = integrate_signals_and_execute(elem)
-                #temp = macd_ema(elem)
+                #signal = str_signal(elem)
+                #signal1 = rsi_signal(elem)
+                # print(elem," :  ",signal1)
+                signal = macd_ema(elem)
+                print(elem," :  ",signal)
                 # 'up' or 'down' signal, we place orders for symbols that arent in the opened positions and orders
                 # we also dont need USDTUSDC because its 1:1 (dont need to spend money for the commission)
-                if temp == 'up'  and elem != 'USDCUSDT' and not elem in pos and not elem in ord and elem != symbol:
+                if signal == 'up' and elem != 'USDCUSDT' and not elem in pos and not elem in ord and elem != symbol:
                     print('Found BUY signal for ', elem)
                     set_mode(elem, type)
                     sleep(1)
@@ -372,7 +301,7 @@ while True:
                     sleep(1)
                     sleep(10)
                     # break
-                if temp == 'down'  and elem != 'USDCUSDT' and not elem in pos and not elem in ord and elem != symbol:
+                if signal == 'down' and elem != 'USDCUSDT' and not elem in pos and not elem in ord and elem != symbol:
                     print('Found SELL signal for ', elem)
                     set_mode(elem, type)
                     sleep(1)
@@ -386,9 +315,9 @@ while True:
                     sleep(1)
                     ord = check_orders()
                     sleep(1)
-                    sleep(30)
+                    sleep(10)
                     # break
-    print('Waiting 2 min')
-    sleep(120)
+    print('Waiting 3 min')
+    sleep(180)
 
 
